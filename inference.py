@@ -5,6 +5,9 @@ from torchvision import transforms
 from PIL import Image
 import io
 from typing import cast
+import os
+import requests
+from pathlib import Path
 
 # The label order matches the LabelEncoder order used during training.
 FRUIT_LABELS = [
@@ -54,9 +57,32 @@ class FruitInferenceModel(nn.Module):
         return self.block2(x), self.block3(x)
 
 # 2. Setup the Loader
-model = FruitInferenceModel()
-model.load_state_dict(torch.load("model.pth", map_location=torch.device('cpu')))
-model.eval()
+def load_model():
+    """Load model from disk or download from MODEL_URL if not present."""
+    model_path = Path("model.pth")
+    
+    # If model doesn't exist, try to download from MODEL_URL env var
+    if not model_path.exists():
+        model_url = os.getenv("MODEL_URL")
+        if model_url:
+            print(f"Downloading model from {model_url}...")
+            response = requests.get(model_url, timeout=300)
+            response.raise_for_status()
+            with open(model_path, "wb") as f:
+                f.write(response.content)
+            print(f"Model saved to {model_path}")
+        else:
+            raise FileNotFoundError(
+                f"{model_path} not found and MODEL_URL environment variable not set. "
+                "Please provide MODEL_URL pointing to model.pth or ensure model.pth exists in /app."
+            )
+    
+    model = FruitInferenceModel()
+    model.load_state_dict(torch.load(str(model_path), map_location=torch.device('cpu')))
+    model.eval()
+    return model
+
+model = load_model()
 
 # Preprocessing matches the training pipeline.
 transform = transforms.Compose([
