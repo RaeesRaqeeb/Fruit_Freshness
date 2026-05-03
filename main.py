@@ -105,6 +105,7 @@ async def home():
                     .value { font-size: 1.1rem; font-weight: 700; }
                     .fresh { color: var(--success); }
                     .rotten { color: var(--warn); }
+                    .unknown { color: var(--muted); }
                     .status { margin-top: 12px; font-size: 0.95rem; color: var(--muted); }
                     .preview {
                         width: 100%;
@@ -152,6 +153,33 @@ async def home():
                                     <div id="statusValue" class="value">-</div>
                                 </div>
                             </div>
+                            <div style="margin-top:12px;">
+                                <div class="stat">
+                                    <div class="label">Keras Primary</div>
+                                    <div id="kerasPrimary" class="value">-</div>
+                                </div>
+                            </div>
+
+                            <div id="modelsDetail" style="margin-top:12px;">
+                                <h3 style="margin:8px 0 6px; font-size:1rem;">Detailed Model Outputs</h3>
+                                <div class="grid">
+                                    <div class="stat" id="pytorchBlock">
+                                        <div class="label">PyTorch</div>
+                                        <div id="ptFruit" class="value">-</div>
+                                        <div class="label" style="margin-top:8px;">Freshness</div>
+                                        <div id="ptStatus" class="value">-</div>
+                                    </div>
+                                    <div class="stat" id="kerasBlock">
+                                        <div class="label">Keras (top-1)</div>
+                                        <div id="kFruit" class="value">-</div>
+                                        <div class="label" style="margin-top:8px;">Confidence</div>
+                                        <div id="kConf" class="value">-</div>
+                                    </div>
+                                </div>
+
+                                <div id="kerasTop3" style="margin-top:10px;"></div>
+                            </div>
+
                             <div id="statusHint" class="status"></div>
                         </div>
                     </section>
@@ -211,10 +239,53 @@ async def home():
                             }
 
                             const data = await response.json();
+                            const normalizeStatus = (status) => (status || '').toLowerCase();
+                            // Top-level (backwards compatible) values - PyTorch primary
                             fruitValue.textContent = data.fruit_type || '-';
                             statusValue.textContent = data.status || '-';
-                            statusValue.className = 'value ' + ((data.status || '').toLowerCase() === 'fresh' ? 'fresh' : 'rotten');
-                            statusHint.textContent = 'Model output received from FastAPI.';
+                            const statusClass = normalizeStatus(data.status) === 'fresh'
+                                ? 'fresh'
+                                : normalizeStatus(data.status) === 'rotten'
+                                    ? 'rotten'
+                                    : 'unknown';
+                            statusValue.className = 'value ' + statusClass;
+
+                            // removed Decision Source display (showing only Keras Primary)
+
+                            // PyTorch block
+                            if (data.pytorch) {
+                                document.getElementById('ptFruit').textContent = data.pytorch.fruit_type || '-';
+                                document.getElementById('ptStatus').textContent = data.pytorch.status || '-';
+                            }
+
+                            // Keras block
+                            if (data.keras) {
+                                document.getElementById('kFruit').textContent = data.keras.fruit_type || '-';
+                                document.getElementById('kConf').textContent = (data.keras.confidence || 0).toFixed(2);
+                                document.getElementById('kerasPrimary').textContent = data.keras.fruit_type || '-';
+
+                                // render top-3
+                                const top3 = data.keras.top3 || [];
+                                const container = document.getElementById('kerasTop3');
+                                container.innerHTML = '<div class="label">Keras Top-3</div>' + top3.map(item => {
+                                    return `<div style="padding:8px; border-radius:8px; background:#fff; border:1px solid #eee; margin-top:6px;">
+                                                <div style="font-weight:700">${item.fruit_type} <span style="font-weight:400; color:#6b7280">(${item.label})</span></div>
+                                                <div style="font-size:0.9rem; color:#6b7280">Status: ${item.status} — ${ (item.probability*100).toFixed(1) }%</div>
+                                            </div>`;
+                                }).join('');
+                            } else {
+                                document.getElementById('kFruit').textContent = '-';
+                                document.getElementById('kConf').textContent = '-';
+                                document.getElementById('kerasTop3').innerHTML = '';
+                                document.getElementById('kerasPrimary').textContent = '-';
+                            }
+
+                            const rejectedBy = [];
+                            if (data.pytorch && data.pytorch.rejected) rejectedBy.push('PyTorch');
+                            if (data.keras && data.keras.rejected) rejectedBy.push('Keras');
+                            statusHint.textContent = rejectedBy.length
+                                ? `Rejected as non-fruit by ${rejectedBy.join(' and ')} using confidence thresholds.`
+                                : 'Top-level fields come from PyTorch; detailed outputs show both models.';
                             resultBox.style.display = 'block';
                         } catch (error) {
                             errorBox.textContent = error.message || 'Something went wrong.';
