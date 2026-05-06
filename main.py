@@ -13,7 +13,7 @@ async def home():
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <title>Fruit Scanner</title>
+                <title>Fruit Scanner (Keras Edition)</title>
                 <style>
                     :root {
                         color-scheme: light;
@@ -126,14 +126,14 @@ async def home():
             <body>
                 <main class="app">
                     <h1>Fruit Scanner</h1>
-                    <p>Upload a fruit image and the model will predict the fruit type and freshness.</p>
+                    <p>Powered by Keras CNN Classification</p>
 
                     <section class="panel">
                         <div class="upload">
                             <input id="fileInput" type="file" accept="image/*" />
                             <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap; align-items:center;">
                                 <button id="scanBtn">Scan Fruit</button>
-                                <span id="loadingText" class="status" style="display:none;">Analyzing image...</span>
+                                <span id="loadingText" class="status" style="display:none;">Analyzing with Keras...</span>
                             </div>
                         </div>
 
@@ -142,38 +142,27 @@ async def home():
                         <div id="errorBox" class="error"></div>
 
                         <div id="resultBox" class="result">
-                            <h2 style="margin:0;">Prediction Result</h2>
+                            <h2 style="margin:0;">Keras Prediction</h2>
                             <div class="grid">
                                 <div class="stat">
-                                    <div class="label">Fruit Type</div>
+                                    <div class="label">Detected Fruit</div>
                                     <div id="fruitValue" class="value">-</div>
                                 </div>
                                 <div class="stat">
-                                    <div class="label">Freshness</div>
+                                    <div class="label">Freshness Status</div>
                                     <div id="statusValue" class="value">-</div>
-                                </div>
-                            </div>
-                            <div style="margin-top:12px;">
-                                <div class="stat">
-                                    <div class="label">Keras Primary</div>
-                                    <div id="kerasPrimary" class="value">-</div>
                                 </div>
                             </div>
 
                             <div id="modelsDetail" style="margin-top:12px;">
-                                <h3 style="margin:8px 0 6px; font-size:1rem;">Detailed Model Outputs</h3>
                                 <div class="grid">
-                                    <div class="stat" id="pytorchBlock">
-                                        <div class="label">PyTorch</div>
-                                        <div id="ptFruit" class="value">-</div>
-                                        <div class="label" style="margin-top:8px;">Freshness</div>
-                                        <div id="ptStatus" class="value">-</div>
-                                    </div>
                                     <div class="stat" id="kerasBlock">
-                                        <div class="label">Keras (top-1)</div>
-                                        <div id="kFruit" class="value">-</div>
-                                        <div class="label" style="margin-top:8px;">Confidence</div>
+                                        <div class="label">Confidence Score</div>
                                         <div id="kConf" class="value">-</div>
+                                    </div>
+                                    <div class="stat">
+                                        <div class="label">Model Source</div>
+                                        <div class="value">TensorFlow/Keras</div>
                                     </div>
                                 </div>
 
@@ -240,53 +229,41 @@ async def home():
 
                             const data = await response.json();
                             const normalizeStatus = (status) => (status || '').toLowerCase();
-                            // Top-level (backwards compatible) values - PyTorch primary
-                            fruitValue.textContent = data.fruit_type || '-';
-                            statusValue.textContent = data.status || '-';
-                            const statusClass = normalizeStatus(data.status) === 'fresh'
-                                ? 'fresh'
-                                : normalizeStatus(data.status) === 'rotten'
-                                    ? 'rotten'
-                                    : 'unknown';
-                            statusValue.className = 'value ' + statusClass;
 
-                            // removed Decision Source display (showing only Keras Primary)
-
-                            // PyTorch block
-                            if (data.pytorch) {
-                                document.getElementById('ptFruit').textContent = data.pytorch.fruit_type || '-';
-                                document.getElementById('ptStatus').textContent = data.pytorch.status || '-';
-                            }
-
-                            // Keras block
                             if (data.keras) {
-                                document.getElementById('kFruit').textContent = data.keras.fruit_type || '-';
-                                document.getElementById('kConf').textContent = (data.keras.confidence || 0).toFixed(2);
-                                document.getElementById('kerasPrimary').textContent = data.keras.fruit_type || '-';
+                                // Update top-level values using Keras results[cite: 3]
+                                fruitValue.textContent = data.keras.fruit_type || '-';
+                                statusValue.textContent = data.keras.status || '-';
+                                
+                                const statusClass = normalizeStatus(data.keras.status) === 'fresh'
+                                    ? 'fresh'
+                                    : normalizeStatus(data.keras.status) === 'rotten'
+                                        ? 'rotten'
+                                        : 'unknown';
+                                statusValue.className = 'value ' + statusClass;
 
-                                // render top-3
+                                // Update confidence
+                                document.getElementById('kConf').textContent = (data.keras.confidence * 100).toFixed(1) + '%';
+
+                                // Render top-3 alternatives[cite: 3]
                                 const top3 = data.keras.top3 || [];
                                 const container = document.getElementById('kerasTop3');
-                                container.innerHTML = '<div class="label">Keras Top-3</div>' + top3.map(item => {
+                                container.innerHTML = '<div class="label">Probability Breakdown (Top-3)</div>' + top3.map(item => {
                                     return `<div style="padding:8px; border-radius:8px; background:#fff; border:1px solid #eee; margin-top:6px;">
-                                                <div style="font-weight:700">${item.fruit_type} <span style="font-weight:400; color:#6b7280">(${item.label})</span></div>
-                                                <div style="font-size:0.9rem; color:#6b7280">Status: ${item.status} — ${ (item.probability*100).toFixed(1) }%</div>
+                                                <div style="font-weight:700">${item.fruit_type} <span style="font-weight:400; color:#6b7280">(${item.status})</span></div>
+                                                <div style="font-size:0.9rem; color:#6b7280">Confidence: ${ (item.probability*100).toFixed(1) }%</div>
                                             </div>`;
                                 }).join('');
+
+                                statusHint.textContent = data.keras.rejected 
+                                    ? 'Result flagged: Confidence score is below the rejection threshold.' 
+                                    : 'Analysis complete using Keras CNN.';
+                                
+                                resultBox.style.display = 'block';
                             } else {
-                                document.getElementById('kFruit').textContent = '-';
-                                document.getElementById('kConf').textContent = '-';
-                                document.getElementById('kerasTop3').innerHTML = '';
-                                document.getElementById('kerasPrimary').textContent = '-';
+                                throw new Error('Keras model output not found in response.');
                             }
 
-                            const rejectedBy = [];
-                            if (data.pytorch && data.pytorch.rejected) rejectedBy.push('PyTorch');
-                            if (data.keras && data.keras.rejected) rejectedBy.push('Keras');
-                            statusHint.textContent = rejectedBy.length
-                                ? `Rejected as non-fruit by ${rejectedBy.join(' and ')} using confidence thresholds.`
-                                : 'Top-level fields come from PyTorch; detailed outputs show both models.';
-                            resultBox.style.display = 'block';
                         } catch (error) {
                             errorBox.textContent = error.message || 'Something went wrong.';
                             errorBox.style.display = 'block';
@@ -304,4 +281,5 @@ async def home():
 async def scan_fruit(file: UploadFile = File(...)):
     image_data = await file.read()
     results = predict(image_data)
+    print("Inference results:", results)
     return results

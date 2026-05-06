@@ -18,104 +18,42 @@ except Exception:
     tf = None
 
 # The label order matches the LabelEncoder order used during training.
-FRUIT_LABELS = [
-    'apples',
-    'banana',
-    'bittergroud',
-    'capsicum',
-    'cucumber',
-    'okra',
-    'oranges',
-    'potato',
-    'tomato',
-]
-FRESH_LABELS = ['Fresh', 'Rotten']
+
+# FRESH_LABELS = ['Fresh', 'Rotten']
 OTHER_LABEL = os.getenv('OTHER_LABEL', 'Others')
 UNKNOWN_STATUS = os.getenv('UNKNOWN_STATUS', 'Unknown')
-PYTORCH_REJECT_THRESHOLD = float(os.getenv('PYTORCH_REJECT_THRESHOLD', '0.60'))
 KERAS_REJECT_THRESHOLD = float(os.getenv('KERAS_REJECT_THRESHOLD', '0.60'))
 
-
-# Replicate the trained architecture for inference.
-class FruitInferenceModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.base = torchvision.models.resnet18(pretrained=False)
-        self.base.classifier = nn.Sequential()
-        self.base.fc = nn.Sequential()  # type: ignore[assignment]
-        
-        self.block1 = nn.Sequential(
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(256, 128),
-        )
-        self.block2 = nn.Sequential(
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(128, 9) # 9 Fruit Types
-        )
-        self.block3 = nn.Sequential(
-            nn.Linear(128, 32),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(32, 2)  # 2 Freshness states
-        )
-
-    def forward(self, x):
-        x = self.base(x)
-        x = self.block1(x)
-        return self.block2(x), self.block3(x)
-
-# 2. Setup the Loader
-def load_model():
-    
-    model_path = Path("model.pth")
-
-    model = FruitInferenceModel()
-    model.load_state_dict(torch.load(str(model_path), map_location=torch.device('cpu')))
-    model.eval()
-    return model
-
-# Load PyTorch model
-pt_model = load_model()
 
 
 def load_keras_model():
     """Load a Keras .keras saved model if available. Path can be set with MODEL_KERAS_PATH env var."""
     if tf is None:
         return None
-
-    default_paths = [
-        os.getenv('MODEL_KERAS_PATH', 'Fruit_freshness.keras'),
-        'Fruit_freshness.keras',
-        'model.keras',
-    ]
-
-    for p in default_paths:
-        if p and Path(p).exists():
-            try:
-                kmodel = tf.keras.models.load_model(p)
-                return kmodel
-            except Exception:
-                continue
+    print("TensorFlow/Keras is available. Attempting to load Keras model...")
+    
+    try:
+        kmodel = tf.keras.models.load_model('Model_1.keras')
+        return kmodel
+    except Exception as e:
+        print(f"Error loading Keras model: {e}")
     return None
 
 # Load optional Keras model
 tf_model = load_keras_model()
 
 # Default Keras class names (18 classes) - used if no external class file found
-KERAS_CLASS_NAMES = [
+KERAS_CLASS_NAMES_model_1 = [
     'freshapples', 'freshbanana', 'freshbittergroud', 'freshcapsicum', 'freshcucumber', 'freshokra',
     'freshoranges', 'freshpotato', 'freshtomato', 'rottenapples', 'rottenbanana', 'rottenbittergroud',
     'rottencapsicum', 'rottencucumber', 'rottenokra', 'rottenoranges', 'rottenpotato', 'rottentomato'
 ]
+KERAS_CLASS_NAMES_model_2 =['Apple_Bad', 'Apple_Good', 'Banana_Bad', 'Banana_Good', 'Guava_Bad', 'Guava_Good', 'Lime_Bad', 'Lime_Good', 'Orange_Bad', 'Orange_Good']
 
 # Preprocessing matches the training pipeline.
 transform = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Resize((224, 224)),
+    transforms.Resize((128, 128)),
     transforms.Normalize(mean=0, std=1),
 ])
 
@@ -127,40 +65,13 @@ def predict(image_bytes):
             return OTHER_LABEL, UNKNOWN_STATUS, True
         return label, None, False
 
-    # PyTorch prediction
-    tensor = cast(torch.Tensor, transform(img)).unsqueeze(0)
-    with torch.no_grad():
-        fruit_logits, fresh_logits = pt_model(tensor)
-        fruit_probs = torch.softmax(fruit_logits, dim=1)[0]
-        fresh_probs = torch.softmax(fresh_logits, dim=1)[0]
-        fruit_idx = int(torch.argmax(fruit_probs).item())
-        fresh_idx = int(torch.argmax(fresh_probs).item())
-        fruit_conf = float(fruit_probs[fruit_idx].item())
-        fresh_conf = float(fresh_probs[fresh_idx].item())
-
-    fruit_label, rejected_status, fruit_rejected = reject_if_needed(
-        FRUIT_LABELS[fruit_idx], fruit_conf, PYTORCH_REJECT_THRESHOLD
-    )
-    if fruit_rejected:
-        pytorch_result = {
-            "fruit_type": fruit_label,
-            "status": rejected_status,
-            "confidence": fruit_conf,
-            "rejected": True,
-        }
-    else:
-        pytorch_result = {
-            "fruit_type": fruit_label,
-            "status": FRESH_LABELS[fresh_idx],
-            "confidence": fruit_conf,
-            "freshness_confidence": fresh_conf,
-            "rejected": False,
-        }
-
+    
     # Keras prediction
     keras_result = None
+    print("Running Keras model inference...")
     if tf_model is not None:
         try:
+            print("Preprocessing image for Keras model...")
             kimg = img.resize((128, 128))
             karr = np.asarray(kimg).astype(np.float32) / 255.0
             if karr.ndim == 2:
@@ -183,7 +94,7 @@ def predict(image_bytes):
                 except Exception:
                     k_classes = None
             if k_classes is None:
-                k_classes = KERAS_CLASS_NAMES
+                k_classes = KERAS_CLASS_NAMES_model_1
 
             def split_label(name: str):
                 
@@ -212,7 +123,7 @@ def predict(image_bytes):
 
             # primary Keras pick (top-1)
             k0 = top3[0]
-            keras_rejected = k0['probability'] < KERAS_REJECT_THRESHOLD
+            keras_rejected = k0['probability'] < 0.85
             keras_result = {
                 'fruit_type': OTHER_LABEL if keras_rejected else k0['fruit_type'],
                 'status': UNKNOWN_STATUS if keras_rejected else k0['status'],
@@ -220,53 +131,28 @@ def predict(image_bytes):
                 'rejected': keras_rejected,
                 'top3': top3,
             }
-        except Exception:
+        except Exception as e:
+            print(f"Error during Keras inference: {e}")
             keras_result = None
 
-    def build_final_prediction(pt_result, k_result):
-        pt_available = pt_result is not None
+    def build_final_prediction( k_result):
+        # pt_available = pt_result is not None
         k_available = k_result is not None
 
-        if pt_available and k_available:
-            if pt_result.get('rejected') or k_result.get('rejected'):
+        if k_available:
+            if k_result.get('rejected'):
                 return {
                     'fruit_type': OTHER_LABEL,
                     'status': UNKNOWN_STATUS,
-                    'source': 'ensemble',
-                    'reason': 'one_or_more_models_rejected',
+                    'reason': 'model_rejected',
                 }
 
-            if pt_result.get('fruit_type') != k_result.get('fruit_type'):
-                return {
-                    'fruit_type': OTHER_LABEL,
-                    'status': UNKNOWN_STATUS,
-                    'source': 'ensemble',
-                    'reason': 'model_disagreement',
-                }
-
-            # If both models agree, use the shared fruit label.
-            status = pt_result.get('status') if pt_result.get('status') in FRESH_LABELS else k_result.get('status')
-            return {
-                'fruit_type': pt_result.get('fruit_type'),
-                'status': status or UNKNOWN_STATUS,
-                'source': 'ensemble',
-                'reason': 'agreement',
-            }
-
-        if pt_available:
-            return {
-                'fruit_type': pt_result.get('fruit_type', OTHER_LABEL),
-                'status': pt_result.get('status', UNKNOWN_STATUS),
-                'source': 'pytorch',
-                'reason': 'keras_unavailable',
-            }
 
         if k_available:
             return {
                 'fruit_type': k_result.get('fruit_type', OTHER_LABEL),
                 'status': k_result.get('status', UNKNOWN_STATUS),
                 'source': 'keras',
-                'reason': 'pytorch_unavailable',
             }
 
         return {
@@ -276,16 +162,15 @@ def predict(image_bytes):
             'reason': 'no_model_available',
         }
 
-    final_prediction = build_final_prediction(pytorch_result, keras_result)
+    final_prediction = build_final_prediction(keras_result)
 
     result = {
         # top-level keys now reflect the ensemble decision
         "fruit_type": final_prediction["fruit_type"],
         "status": final_prediction["status"],
         "decision": final_prediction,
-        "pytorch": pytorch_result,
         "keras": keras_result,
-        "models": {"pytorch": True, "keras": tf_model is not None},
+        "models": {"keras": tf_model is not None},
     }
 
     return result
