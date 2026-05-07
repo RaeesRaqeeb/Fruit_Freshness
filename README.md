@@ -121,7 +121,7 @@ The web interface provides a user-friendly way to:
 
 The models were trained using a comprehensive fruit freshness dataset. For detailed training methodology and dataset information, refer to the Kaggle notebook:
 
-Kaggle Notebook: https://www.kaggle.com/code/raqeeb24/fruit-classifier/
+Kaggle Notebook: [https://www.kaggle.com/code/raqeeb24/fruit-classifier/](https://www.kaggle.com/code/raqeeb24/fruit-freshness-inspection-system/)
 
 ## Production Readiness - Future Enhancements
 
@@ -224,4 +224,4 @@ For issues, questions, or suggestions, please contact the project lead:
 - Raqeeb Raees
 
 For more information and detailed analysis, visit the Kaggle notebook:
-https://www.kaggle.com/code/raqeeb24/fruit-classifier/
+[https://www.kaggle.com/code/raqeeb24/fruit-classifier/](https://www.kaggle.com/code/raqeeb24/fruit-freshness-inspection-system/)
