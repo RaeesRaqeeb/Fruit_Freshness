@@ -90,27 +90,26 @@ docker run -p 8000:8000 fruit-inspection-system
 
 Endpoint: POST /predict
 
-Request:
-## - Method: POST
+## Request:
+- Method: POST
 - Content-Type: multipart/form-data
 - Parameter: file (image file)
 
-Response:
+## Response:
 {
   "prediction": "freshapples",
   "confidence": 0.95,
-##   "status": "Fresh"
+   "status": "Fresh"
 }
 
-Web Interface
+## Web Interface
 
 The web interface provides a user-friendly way to:
 - Upload fruit imagesand PyTorch (.pth format)
-
-## - Display confidence scores
+- Display confidence scores
 - Show predicted fruit freshness status
 
-Model Details
+## Model Details
 
 - Architecture: Convolutional Neural Network (CNN)
 - Input: RGB images (standardized dimensions)
@@ -118,7 +117,7 @@ Model Details
 - Confidence Threshold: Configurable (default: 0.85)
 - Model Files: Keras (.keras format) 
 
-Training Dataset
+## Training Dataset
 
 The models were trained using a comprehensive fruit freshness dataset. For detailed training methodology and dataset information, refer to the Kaggle notebook:
 
