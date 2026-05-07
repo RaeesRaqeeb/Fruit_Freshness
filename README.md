@@ -79,7 +79,7 @@ The system consists of two main components:
 
 ### Endpoint: POST /predict
 
-#### ```bash
+```bash
 docker build -t fruit-inspection-system .
 docker run -p 8000:8000 fruit-inspection-system
 ```
